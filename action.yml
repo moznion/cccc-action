@@ -1,0 +1,103 @@
+name: cccc
+description: >-
+  Install the cccc multi-language complexity analyzer from a GitHub release, and
+  optionally run it as a Cognitive/Cyclomatic complexity gate.
+author: moznion
+branding:
+  icon: activity
+  color: purple
+
+inputs:
+  version:
+    description: >-
+      Release tag to install (e.g. "v1.0.0"), or "latest" to resolve the most
+      recent release.
+    required: false
+    default: latest
+  repository:
+    description: Repository to fetch the cccc release from.
+    required: false
+    default: moznion/cccc
+  github-token:
+    description: >-
+      Token used to query the GitHub API (avoids rate limits when resolving
+      "latest" and downloading assets).
+    required: false
+    default: ${{ github.token }}
+
+  # --- Analysis (only runs when `path` is set) ---
+  #
+  # Analysis behavior (languages, excludes, extensions, complexity thresholds,
+  # ignore/jobs, table output) is configured through cccc's config file
+  # (cccc.toml / .cccc.toml) rather than mirrored as action inputs — keeping a
+  # single source of truth avoids drift as cccc's options evolve. Only the
+  # command-line-only knobs are exposed here; use `args` for anything else.
+  path:
+    description: >-
+      Files or directories to analyze (whitespace-separated). When empty, the
+      action only installs the binary and adds it to PATH.
+    required: false
+    default: ""
+  config:
+    description: >-
+      Path to an explicit cccc config file (cccc.toml). When empty, cccc
+      auto-discovers cccc.toml / .cccc.toml by walking up from the working
+      directory (unless `no-config` is set).
+    required: false
+    default: ""
+  no-config:
+    description: Skip config-file discovery and loading entirely.
+    required: false
+    default: "false"
+  top-cognitive:
+    description: Show only the N most cognitively-complex functions across all files.
+    required: false
+    default: ""
+  top-cyclomatic:
+    description: Show only the N most cyclomatically-complex functions across all files.
+    required: false
+    default: ""
+  args:
+    description: >-
+      Extra raw arguments appended verbatim to the cccc invocation. Use this to
+      pass any option not exposed above (e.g. "--max-cognitive 15 --lang es").
+    required: false
+    default: ""
+  output-file:
+    description: If set, also write cccc output to this file (gate exit code preserved).
+    required: false
+    default: ""
+
+outputs:
+  version:
+    description: The release tag that was installed.
+    value: ${{ steps.install.outputs.version }}
+  bin:
+    description: Absolute path to the installed cccc binary.
+    value: ${{ steps.install.outputs.bin }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install cccc
+      id: install
+      shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_REPOSITORY: ${{ inputs.repository }}
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/install.sh"
+
+    - name: Run cccc
+      if: inputs.path != ''
+      shell: bash
+      env:
+        BIN: ${{ steps.install.outputs.bin }}
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_CONFIG: ${{ inputs.config }}
+        INPUT_NO_CONFIG: ${{ inputs.no-config }}
+        INPUT_TOP_COGNITIVE: ${{ inputs.top-cognitive }}
+        INPUT_TOP_CYCLOMATIC: ${{ inputs.top-cyclomatic }}
+        INPUT_ARGS: ${{ inputs.args }}
+        INPUT_OUTPUT_FILE: ${{ inputs.output-file }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/run.sh"

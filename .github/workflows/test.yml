@@ -1,0 +1,98 @@
+name: test
+
+# NOTE: this exercises the action end-to-end, so it downloads a real cccc
+# release asset. It will only pass once moznion/cccc has at least one release
+# (a pushed v* tag). Until then, run it manually via "Run workflow".
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Create a sample source file
+        shell: bash
+        run: |
+          mkdir -p sample
+          cat > sample/app.ts <<'TS'
+          export function greet(name: string): string {
+            if (name) {
+              return `hello, ${name}`;
+            }
+            return "hello";
+          }
+          TS
+
+      # 1. Install only, then call the binary directly.
+      - name: Install only
+        id: install
+        uses: ./
+      - name: Binary is on PATH
+        shell: bash
+        run: |
+          cccc --version
+          test -x "${{ steps.install.outputs.bin }}"
+          echo "installed version: ${{ steps.install.outputs.version }}"
+
+      # 2. Gate mode via `args` (thresholds are cccc options, not action inputs).
+      - name: Gate (pass)
+        uses: ./
+        with:
+          path: sample
+          args: --max-cognitive 100
+
+      # 3. Gate mode that should fail (threshold 0).
+      - name: Gate (expected fail)
+        id: gate_fail
+        continue-on-error: true
+        uses: ./
+        with:
+          path: sample
+          args: --max-cognitive 0
+      - name: Assert the gate failed
+        shell: bash
+        run: |
+          if [ "${{ steps.gate_fail.outcome }}" != "failure" ]; then
+            echo "::error::expected the --max-cognitive 0 gate to fail, but it did not" >&2
+            exit 1
+          fi
+          echo "gate correctly failed"
+
+      # 4. Config-file support: thresholds come from a discovered cccc.toml.
+      #    max-cognitive 0 must fail the gate, proving the file was loaded.
+      - name: Create a cccc.toml
+        shell: bash
+        run: |
+          cat > cccc.toml <<'TOML'
+          max-cognitive = 0
+          TOML
+      - name: Gate via cccc.toml (expected fail)
+        id: gate_config
+        continue-on-error: true
+        uses: ./
+        with:
+          path: sample
+      - name: Assert the config-driven gate failed
+        shell: bash
+        run: |
+          if [ "${{ steps.gate_config.outcome }}" != "failure" ]; then
+            echo "::error::expected the cccc.toml max-cognitive 0 gate to fail" >&2
+            exit 1
+          fi
+          echo "config-driven gate correctly failed"
+
+      # 5. --no-config must ignore that cccc.toml, so the same run now passes.
+      - name: Gate with --no-config (ignores cccc.toml)
+        uses: ./
+        with:
+          path: sample
+          no-config: "true"
