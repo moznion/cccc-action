@@ -64,6 +64,48 @@ Use `args` to pass any cccc option verbatim:
     args: --max-cognitive 15 --lang es --exclude 'dist/**'
 ```
 
+### Reuse results across runs (`cache = true` in `cccc.toml`)
+
+Caching follows the same rule as everything else: it is configured in
+`cccc.toml`, not through action inputs.
+
+```toml
+# cccc.toml
+cache = true
+```
+
+That's it — no workflow changes. The action asks cccc where its
+[results cache](https://github.com/moznion/cccc#results-cache) resolves to
+(`cccc --print-cache-file`) and, when enabled, persists that file between
+workflow runs through `actions/cache`: no key design, paths, or save/restore
+wiring on your side. Unchanged files are validated against git's index
+instead of being re-parsed; only files that changed since the previous run
+are re-analyzed (measured ~1.6–9.6× faster than a cold run on large trees).
+The same `cache = true` also speeds up everyone's local runs — one setting,
+one behavior. Add the cache file (`.cccc.cache` by default) to `.gitignore`.
+
+Details the action takes care of:
+
+- **The cache is saved even when the complexity gate fails.** The run step
+  records cccc's exit code, the save step runs, and a final gate step
+  re-raises the code — so a red gate still warms the next run.
+- **Stale caches are safe by design.** cccc validates every entry against the
+  file's actual content, so the laziest possible key strategy (`restore-keys`
+  prefix match on the newest previous cache) is also a correct one; there is
+  nothing to clean up.
+- **Jobs don't thrash each other's cache.** The key includes a discriminator
+  derived from what is analyzed and how (`path`/`config`/`args`), so jobs
+  caching different analyses of the same repository keep separate entries.
+
+One-off control still works through the usual escape hatch: `args: --cache`
+enables caching without a config file, `args: --no-cache` disables it for one
+workflow — the action honors either, since it asks cccc rather than parsing
+the config itself.
+
+Worth enabling on medium-to-large trees; on small ones (a cold run of a few
+hundred files takes tens of milliseconds) the cache download/upload costs
+more than it saves.
+
 ### Install only, then use the binary yourself
 
 ```yaml
@@ -87,6 +129,9 @@ Use `args` to pass any cccc option verbatim:
 | `top-cyclomatic` | | Show the N most cyclomatically-complex functions |
 | `args` | | Extra raw arguments appended to the invocation |
 | `output-file` | | Also write output to this file (gate exit code preserved) |
+
+There is deliberately no `cache` input: enable it with `cache = true` in
+`cccc.toml` (see above), and the action wires up the persistence.
 
 > Analysis options such as `max-cognitive`, `lang`, `exclude`, `ext`, `jobs`,
 > etc. are **not** action inputs — set them in `cccc.toml`, or pass them via

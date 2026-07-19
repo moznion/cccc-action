@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := all
 .PHONY: all lint actionlint shellcheck test
 
-SCRIPTS := scripts/install.sh scripts/run.sh
+SCRIPTS := scripts/install.sh scripts/run.sh scripts/resolve-cache.sh
 
 all: lint test
 
