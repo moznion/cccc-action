@@ -88,7 +88,40 @@ runs:
         GH_TOKEN: ${{ inputs.github-token }}
       run: bash "$GITHUB_ACTION_PATH/scripts/install.sh"
 
+    # --- Results cache -----------------------------------------------------
+    # Whether to cache is cccc.toml's call (`cache = true`) — the same single
+    # source of truth local runs use — not an action input. The action asks
+    # cccc where the cache resolves to and, when enabled, wires actions/cache
+    # persistence around the run: restore before, save after. The run step
+    # never fails on its own — it publishes cccc's exit code and the final
+    # gate step re-raises it — so a failing complexity gate cannot skip the
+    # save (actions/cache's own post-hook save would be). Keys need no
+    # curation: the cache file is self-validating, so whatever restore-keys
+    # brings back is safe, and only changed files are re-analyzed.
+    - name: Resolve results cache
+      id: cache
+      if: inputs.path != ''
+      shell: bash
+      env:
+        BIN: ${{ steps.install.outputs.bin }}
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_CONFIG: ${{ inputs.config }}
+        INPUT_NO_CONFIG: ${{ inputs.no-config }}
+        INPUT_ARGS: ${{ inputs.args }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/resolve-cache.sh"
+
+    - name: Restore results cache
+      id: restore-cache
+      if: inputs.path != '' && steps.cache.outputs.file != ''
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ steps.cache.outputs.file }}
+        key: cccc-cache-${{ runner.os }}-${{ steps.install.outputs.version }}-${{ steps.cache.outputs.key-part }}-${{ github.sha }}
+        restore-keys: |
+          cccc-cache-${{ runner.os }}-${{ steps.install.outputs.version }}-${{ steps.cache.outputs.key-part }}-
+
     - name: Run cccc
+      id: run
       if: inputs.path != ''
       shell: bash
       env:
@@ -100,4 +133,30 @@ runs:
         INPUT_TOP_CYCLOMATIC: ${{ inputs.top-cyclomatic }}
         INPUT_ARGS: ${{ inputs.args }}
         INPUT_OUTPUT_FILE: ${{ inputs.output-file }}
+        CCCC_CACHE_FILE: ${{ steps.cache.outputs.file }}
       run: bash "$GITHUB_ACTION_PATH/scripts/run.sh"
+
+    # Skipped when caching is off, when there is nothing to save (cccc bailed
+    # before writing a cache), or when this exact key was already restored (a
+    # re-run of the same commit).
+    - name: Save results cache
+      if: >-
+        inputs.path != '' && steps.cache.outputs.file != '' &&
+        steps.run.outputs.cache-file-exists == 'true' &&
+        steps.restore-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ steps.cache.outputs.file }}
+        key: ${{ steps.restore-cache.outputs.cache-primary-key }}
+
+    - name: Complexity gate
+      if: inputs.path != ''
+      shell: bash
+      env:
+        EXIT_CODE: ${{ steps.run.outputs.exit-code }}
+      run: |
+        if [ -z "$EXIT_CODE" ]; then
+          echo "::error::the cccc run step published no exit code"
+          exit 1
+        fi
+        exit "$EXIT_CODE"

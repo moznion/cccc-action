@@ -19,6 +19,7 @@ setup() {
 #!/usr/bin/env bash
 echo "ARGC=$#"
 for a in "$@"; do echo "ARG=$a"; done
+exit "${FAKE_EXIT:-0}"
 EOF
   chmod +x "$FAKEBIN"
   export BIN="$FAKEBIN"
@@ -26,7 +27,9 @@ EOF
   # run.sh uses `set -u`, so every input must be defined (empty by default).
   export INPUT_PATH="" INPUT_CONFIG="" INPUT_NO_CONFIG="" \
     INPUT_TOP_COGNITIVE="" INPUT_TOP_CYCLOMATIC="" \
-    INPUT_ARGS="" INPUT_OUTPUT_FILE=""
+    INPUT_ARGS="" INPUT_OUTPUT_FILE="" \
+    CCCC_CACHE_FILE="" \
+    GITHUB_OUTPUT="$BATS_TEST_TMPDIR/github_output"
 }
 
 @test "no inputs: invokes the binary with zero arguments" {
@@ -106,4 +109,50 @@ EOF
   run bash "$RUN"
   [ "$status" -eq 0 ]
   [[ "$output" == *"+ cccc"* ]]
+}
+
+@test "no cache flags are injected — config-file resolution owns caching" {
+  export INPUT_PATH="src"
+  run bash "$RUN"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"cache"* ]]
+}
+
+@test "a passing run publishes exit-code=0" {
+  run bash "$RUN"
+  [ "$status" -eq 0 ]
+  grep -q '^exit-code=0$' "$GITHUB_OUTPUT"
+}
+
+@test "a failing gate is captured, not propagated: the step succeeds and publishes the code" {
+  export FAKE_EXIT=1
+  run bash "$RUN"
+  [ "$status" -eq 0 ]
+  grep -q '^exit-code=1$' "$GITHUB_OUTPUT"
+}
+
+@test "the gate exit code survives the output-file tee" {
+  export FAKE_EXIT=1 INPUT_OUTPUT_FILE="$BATS_TEST_TMPDIR/result.txt"
+  run bash "$RUN"
+  [ "$status" -eq 0 ]
+  grep -q '^exit-code=1$' "$GITHUB_OUTPUT"
+  [ -f "$INPUT_OUTPUT_FILE" ]
+}
+
+@test "cache-file-exists is published only when the cache file was written" {
+  export CCCC_CACHE_FILE="$BATS_TEST_TMPDIR/cccc.cache"
+  run bash "$RUN"
+  [ "$status" -eq 0 ]
+  ! grep -q '^cache-file-exists=true$' "$GITHUB_OUTPUT"
+
+  : > "$CCCC_CACHE_FILE"
+  run bash "$RUN"
+  [ "$status" -eq 0 ]
+  grep -q '^cache-file-exists=true$' "$GITHUB_OUTPUT"
+}
+
+@test "an empty cache path (caching off) never publishes cache-file-exists" {
+  run bash "$RUN"
+  [ "$status" -eq 0 ]
+  ! grep -q 'cache-file-exists' "$GITHUB_OUTPUT"
 }
