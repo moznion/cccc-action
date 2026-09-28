@@ -113,7 +113,7 @@ runs:
     - name: Restore results cache
       id: restore-cache
       if: inputs.path != '' && steps.cache.outputs.file != ''
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ${{ steps.cache.outputs.file }}
         key: cccc-cache-${{ runner.os }}-${{ steps.install.outputs.version }}-${{ steps.cache.outputs.key-part }}-${{ github.sha }}
@@ -144,7 +144,7 @@ runs:
         inputs.path != '' && steps.cache.outputs.file != '' &&
         steps.run.outputs.cache-file-exists == 'true' &&
         steps.restore-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ${{ steps.cache.outputs.file }}
         key: ${{ steps.restore-cache.outputs.cache-primary-key }}
