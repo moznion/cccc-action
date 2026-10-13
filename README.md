@@ -2,8 +2,8 @@
 
 A GitHub composite action that installs the
 [`cccc`](https://github.com/moznion/cccc) complexity analyzer from a GitHub
-release (matching the runner's OS/arch, verified by SHA-256) and adds it to
-`PATH`. If you pass `path`, it also runs cccc as a Cognitive/Cyclomatic
+release (matching the runner's OS/arch, verified by SHA-256 and by its
+[build provenance attestation](#verifying-the-binary)) and adds it to `PATH`. If you pass `path`, it also runs cccc as a Cognitive/Cyclomatic
 complexity gate.
 
 `cccc` is a single binary that measures **Cognitive Complexity** (SonarSource)
@@ -122,6 +122,7 @@ more than it saves.
 | `version` | `latest` | Release tag to install (e.g. `v1.0.0`), or `latest` |
 | `repository` | `moznion/cccc` | Repo to fetch the cccc release from |
 | `github-token` | `${{ github.token }}` | Token for API calls / asset downloads |
+| `verify-attestation` | `auto` | Verify the archive's attestation: `auto` (immutable releases), `true`, or `false` — see [below](#verifying-the-binary) |
 | `path` | _(empty)_ | Files/dirs to analyze. **Empty = install only** |
 | `config` | | Explicit path to a `cccc.toml` config file |
 | `no-config` | `false` | Skip config-file discovery and loading |
@@ -144,10 +145,29 @@ There is deliberately no `cache` input: enable it with `cache = true` in
 | `version` | The release tag that was installed |
 | `bin` | Absolute path to the installed `cccc` binary |
 
+## Verifying the binary
+
+Besides checking the archive against the release's `.sha256` file, the action
+verifies its build provenance attestation with
+[`gh attestation verify`](https://cli.github.com/manual/gh_attestation_verify):
+the archive must have been built from `moznion/cccc` by its
+[release workflow](https://github.com/moznion/cccc/blob/main/.github/workflows/release-build.yml)
+on a GitHub-hosted runner. A checksum alone cannot catch a swapped release
+asset, since its `.sha256` file can be swapped along with it; an attestation
+is signed through GitHub Actions' OIDC identity and cannot be forged that way.
+
+With the default `verify-attestation: auto`, this runs for every
+[immutable](https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/immutable-releases)
+cccc release (v1.8.1 and later, all of which are attested); older releases
+predate attestations and get the checksum check only. Set `true` to require an
+attestation regardless (installing an older release then fails), or `false` to
+skip it, e.g. on a self-hosted runner without the GitHub CLI (`gh`, which
+GitHub-hosted runners ship).
+
 ## Supported runners
 
 `ubuntu-latest`, `macos-latest`, and `windows-latest` (the targets published by
-the [cccc release workflow](https://github.com/moznion/cccc/blob/main/.github/workflows/release.yml)):
+the [cccc release workflow](https://github.com/moznion/cccc/blob/main/.github/workflows/release-build.yml)):
 
 | OS | Arch | Target |
 |----|------|--------|
