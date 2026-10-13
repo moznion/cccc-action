@@ -43,6 +43,25 @@ jobs:
           test -x "${{ steps.install.outputs.bin }}"
           echo "installed version: ${{ steps.install.outputs.version }}"
 
+      # 1b. A release without an attestation (v1.8.0 predates them) must fail
+      #     when verification is forced. (Step 1 installs the latest release,
+      #     which is immutable, so it already exercises a passing verification.)
+      - name: Install an unattested release with verification forced (expected fail)
+        id: unattested
+        continue-on-error: true
+        uses: ./
+        with:
+          version: v1.8.0
+          verify-attestation: "true"
+      - name: Assert the unattested install failed
+        shell: bash
+        run: |
+          if [ "${{ steps.unattested.outcome }}" != "failure" ]; then
+            echo "::error::expected installing unattested v1.8.0 with verify-attestation: true to fail" >&2
+            exit 1
+          fi
+          echo "unattested release correctly rejected"
+
       # 2. Gate mode via `args` (thresholds are cccc options, not action inputs).
       - name: Gate (pass)
         uses: ./

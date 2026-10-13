@@ -24,6 +24,16 @@ inputs:
       "latest" and downloading assets).
     required: false
     default: ${{ github.token }}
+  verify-attestation:
+    description: >-
+      Verify the downloaded archive's build provenance attestation with
+      `gh attestation verify`: "auto" (verify when the release is immutable,
+      as every cccc release since attestations were introduced is), "true"
+      (always; fails for releases without one), or "false" (only the SHA-256
+      checksum is verified). Needs the GitHub CLI, which GitHub-hosted runners
+      ship.
+    required: false
+    default: auto
 
   # --- Analysis (only runs when `path` is set) ---
   #
@@ -85,6 +95,7 @@ runs:
       env:
         INPUT_VERSION: ${{ inputs.version }}
         INPUT_REPOSITORY: ${{ inputs.repository }}
+        INPUT_VERIFY_ATTESTATION: ${{ inputs.verify-attestation }}
         GH_TOKEN: ${{ inputs.github-token }}
       run: bash "$GITHUB_ACTION_PATH/scripts/install.sh"
 
