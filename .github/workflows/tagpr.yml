@@ -1,0 +1,37 @@
+name: tagpr
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: read
+
+jobs:
+  tagpr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - id: tagpr
+        uses: Songmu/tagpr@0c4eb5a3b0862693702acea436a7c68bd586530d # v1.21.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # tagpr only creates the full semver tag (e.g. v1.2.0). Move the floating
+      # major tag (e.g. v1) so that `uses: moznion/cccc-action@v1` follows it.
+      - name: Move the major version tag
+        if: steps.tagpr.outputs.tag != ''
+        env:
+          TAG: ${{ steps.tagpr.outputs.tag }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          remote="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --force "$remote" "refs/tags/${TAG}:refs/tags/${TAG}"
+          major="${TAG%%.*}"
+          git tag -f "$major" "${TAG}^{commit}"
+          git push --force "$remote" "refs/tags/${major}"
