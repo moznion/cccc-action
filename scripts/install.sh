@@ -50,7 +50,7 @@ fi
 
 # Print the release JSON at releases/<$1> (e.g. "latest", "tags/v1.0.0").
 fetch_release() {
-  curl -fsSL "${auth[@]}" -H "X-GitHub-Api-Version: 2022-11-28" \
+  curl --retry 3 -fsSL "${auth[@]}" -H "X-GitHub-Api-Version: 2022-11-28" \
     "https://api.github.com/repos/$repo/releases/$1"
 }
 
@@ -88,8 +88,8 @@ mkdir -p "$workdir"
 cd "$workdir"
 
 echo "Downloading $base/$archive"
-curl -fsSL "${auth[@]}" -o "$archive" "$base/$archive"
-curl -fsSL "${auth[@]}" -o "$sha_file" "$base/$sha_file"
+curl --retry 3 -fsSL "${auth[@]}" -o "$archive" "$base/$archive"
+curl --retry 3 -fsSL "${auth[@]}" -o "$sha_file" "$base/$sha_file"
 
 # Verify the SHA-256 checksum.
 expected=$(awk '{print $1}' "$sha_file")

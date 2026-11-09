@@ -115,6 +115,11 @@ more than it saves.
 - run: cccc --top-cognitive 10 src/
 ```
 
+Temporary errors while fetching release information or downloading the
+release archive and checksum are retried up to three times with curl's
+exponential backoff. Permanent errors such as a missing release (404) are not
+retried.
+
 ## Inputs
 
 | Input | Default | Description |

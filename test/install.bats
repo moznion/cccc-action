@@ -29,16 +29,19 @@ setup() {
 #!/usr/bin/env bash
 out=""
 url=""
+retry=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) out="$2"; shift ;;
     -H) shift ;;
+    --retry) retry="$2"; shift ;;
     -*) ;;
     *) url="$1" ;;
   esac
   shift
 done
 echo "$url" >> "$CURL_LOG"
+echo "${retry:-none}" >> "$CURL_RETRY_LOG"
 case "$out" in
   "") printf '%s\n' "$FAKE_RELEASE_JSON" ;;
   *.sha256) cp "$FIXTURE/archive.sha256" "$out" ;;
@@ -54,8 +57,11 @@ EOF
   export PATH="$FAKEBIN:$PATH"
 
   export FIXTURE
-  export CURL_LOG="$BATS_TEST_TMPDIR/curl.log" GH_LOG="$BATS_TEST_TMPDIR/gh.log"
+  export CURL_LOG="$BATS_TEST_TMPDIR/curl.log" \
+    CURL_RETRY_LOG="$BATS_TEST_TMPDIR/curl-retry.log" \
+    GH_LOG="$BATS_TEST_TMPDIR/gh.log"
   : > "$CURL_LOG"
+  : > "$CURL_RETRY_LOG"
   export FAKE_RELEASE_JSON='{
   "tag_name": "v9.9.9",
   "body": "mentions \"immutable\": true in text",
@@ -84,6 +90,8 @@ moznion/cccc/.github/workflows/release-build.yml
   grep -q '^version=v9.9.9$' "$GITHUB_OUTPUT"
   # "latest" was resolved once and its JSON reused for the immutable check.
   [ "$(grep -c '^https://api.github.com/' "$CURL_LOG")" -eq 1 ]
+  # API metadata, archive, and checksum fetches all enable three retries.
+  [ "$(cat "$CURL_RETRY_LOG")" = $'3\n3\n3' ]
 }
 
 @test "auto skips a mutable release, ignoring \"immutable\" in its body" {
